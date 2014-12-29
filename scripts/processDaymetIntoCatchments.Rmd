@@ -11,13 +11,15 @@
 ```{r Libraries}
 rm(list=setdiff(ls(), "CATCHMENTS"))
 
+#library(dplyr)
 library(maptools)
-library(dplyr) 
-library(RSQLite)
-library(RSQLite.extfuns)
-library(ncdf4)
-library(reshape2)
-library(tcltk)
+#library(RSQLite)
+#library(RSQLite.extfuns)
+#library(ncdf4)
+#library(reshape2)
+#library(tcltk)
+library(maptools)
+
 ```
 
 ---
@@ -26,8 +28,7 @@ library(tcltk)
 
 # Define the projections of the shapefiles and Daymet data
 #   Note: The Daymet proj4 is just the coordinate system the projection is based on.
-#PROJ4.NHD     <- "+proj=longlat +ellps=GRS80 +datum=NAD83 +no_defs +towgs84=0,0,0"
-PROJ4.DAYMET  <- "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs +towgs84=0,0,0"
+proj4.Lambert <- "+proj=lcc +ellps=WGS84 +datum=WGS84 +lat_1=25 +lat_2=60 +lat_0=42.5 +lon_0=-100 +x_0=0 +y_0=0"
 
 # Temporal range
 START_YEAR <- 1980
@@ -37,21 +38,27 @@ END_YEAR <- 2013
 VARIABLES <- c('tmax', 'tmin', 'prcp', 'dayl', 'srad', 'vp', 'swe')
 
 # Destination folder of the raw Daymet data
-DAYMET_DIRECTORY <- 'F:/KPONEIL/SourceData/climate/DAYMET/raw'
-#DAYMET_DIRECTORY <- '//IGSAGBEBWS-MJO7/projects/dataIn/environmental/climate/daymet/Daily'
+DAYMET_DIRECTORY <- '//IGSAGBEBWS-MJO7/projects/dataIn/environmental/climate/daymet/Daily'
 
 # Name of the database with Daymet data paired to NHDPlus catchments
-DATABASE_NAME <- 'DaymetByHRDCatchments'
+#DATABASE_NAME <- 'DaymetByNENYHRDCatchments'
+DATABASE_NAME <- 'test'
+TABLE_NAME <- 'climateRecord'
+tableName <- TABLE_NAME
 
-CATCHMENTS <- readShapePoly('C:/KPONEIL/daymetToHUCs/shapefiles/NortheastHRD_Catchments_DaymetPrj.shp', proj4string=CRS(PROJ4.DAYMET))
+CATCHMENTS <- readShapePoly('C:/KPONEIL/GitHub/projects/daymetClimateData/gisFiles/shapefiles/NENYHRD_AllCatchments_DaymetPrj.shp', proj4string=CRS(proj4.Lambert))
+
+ZONE_FIELD <- 'FEATUREID'
 
 # Run this until package is created
+
 source('C:/KPONEIL/GitHub/projects/daymetClimateData/scripts/functions/daymetMosaicDownload.R')
-source('C:/KPONEIL/GitHub/projects/daymetClimateData/scripts/functions/spatialAverageDaymet.R')
-source('C:/KPONEIL/GitHub/projects/daymetClimateData/scripts/functions/tileCatchmentsShapefile.R')
-source('C:/KPONEIL/GitHub/projects/daymetClimateData/scripts/functions/transformShapefile.R')
-source('C:/KPONEIL/GitHub/projects/daymetClimateData/scripts/functions/convertDaymetToSQLiteDatabase.R')
+#source('C:/KPONEIL/GitHub/projects/daymetClimateData/scripts/functions/spatialAverageDaymet.R')
+#source('C:/KPONEIL/GitHub/projects/daymetClimateData/scripts/functions/tileCatchmentsShapefile.R')
+#source('C:/KPONEIL/GitHub/projects/daymetClimateData/scripts/functions/transformShapefile.R')
+#source('C:/KPONEIL/GitHub/projects/daymetClimateData/scripts/functions/convertDaymetToSQLiteDatabase.R')
 source('C:/KPONEIL/GitHub/projects/daymetClimateData/scripts/functions/returnRecordFromDaymetDB.R')
+source('C:/KPONEIL/GitHub/projects/daymetClimateData/scripts/functions/determineSpatialRelationships.R')
 
 ```
 
@@ -73,7 +80,8 @@ daymetMosaicDownload(startYear = START_YEAR,
 setwd(DAYMET_DIRECTORY)
 
 # If the database does not exist then create one
-if ( !file.exists(DATABASE_NAME) ) {src_sqlite(DATABASE_NAME, create = T)}
+if ( !file.exists(DATABASE_NAME) ) 
+  { src_sqlite(DATABASE_NAME, create = T) }
 
 # Connect to the database
 database <- dbConnect(SQLite(), DATABASE_NAME)
@@ -85,13 +93,24 @@ database <- dbConnect(SQLite(), DATABASE_NAME)
 
 # Variables and years to average and add to database
 B <- proc.time()[3]
-convertDaymetToSQLiteDatabase(databaseConnection = database,
-                                tableName = "climateRecord",
-                                years = seq(from = START_YEAR, to = END_YEAR, by = 1),
-                                variables = VARIABLES,
-                                daymetDirectory = DAYMET_DIRECTORY,
-                                catchmentsShapefile = CATCHMENTS,
-                                daymetProj4string = PROJ4.DAYMET)
+
+allYears <- seq(from = START_YEAR, to = END_YEAR, by = 1)
+
+catTest <- CATCHMENTS[1:10,]
+
+spatialIndeces <- determineSpatialRelationships(catchmentsShapefile = catTest, 
+                                              daymetDirectory = DAYMET_DIRECTORY,
+                                              variables = VARIABLES,
+                                              years = allYears)
+
+
+
+
+
+
+
+
+
 E <- proc.time()[3]
 
 print("Total time: ", (E - B)/3600, " hours.")

@@ -56,7 +56,7 @@ tileCatchmentsShapefile <- function(catchmentsShapefileDaymet){
       }
       
       # Print status
-      print(paste0( j +(XL*(i-1)), " of ", XL*YL, " iterations.") )
+      print(paste0( "Tiling shapefile: ", j +(XL*(i-1)), " of ", XL*YL, " iterations complete.") )
     }
   }
   
