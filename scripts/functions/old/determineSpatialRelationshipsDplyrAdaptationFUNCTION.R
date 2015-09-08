@@ -78,6 +78,9 @@ require(RSQLite)
 require(RSQLite.extfuns)
 
 
+source('C:/KPONEIL/GitHub/projects/daymetClimateData/scripts/functions/determineSpatialRelationships.R')
+
+
 # Create and connect to the database
 # ----------------------------------
 databasePath <- file.path(DAYMET_DIRECTORY, DATABASE_NAME)
@@ -91,9 +94,23 @@ database <- dbConnect(SQLite(), databasePath)
 
 
 
+# Put in shapefile projection check
+
+
+
+
+zonesShapefile <- CATCHMENTS
+
+
+
+  if (proj4string(zonesShapefile) != "+proj=lcc +ellps=WGS84 +datum=WGS84 +lat_1=25 +lat_2=60 +lat_0=42.5 +lon_0=-100 +x_0=0 +y_0=0") 
+    {stop("The correct projection has not been defined for the shapefile")}
+
+
 
 catsId <- CATCHMENTS[1:10,]
 catsId@data$ZONE_FIELD <- catsId@data[,ZONE_FIELD]
+
 
 
 

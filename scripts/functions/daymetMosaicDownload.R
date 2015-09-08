@@ -1,16 +1,18 @@
-# startYear - numeric, the first year in sequence to begin downloading files for
-# endYear - numeric, the last year in sequence to begin downloading files for
+
+# years - numeric, a vector of years to download
 # variables - vector of character strings, the variables to download as named by Daymet (e.g. "prcp")
 # destinationFolder - A character string of the file path to the folder to download the files to
 # retryFailedDownloads - TRUE/FALSE A check of whether the file was downloaded successfully. If TRUE, the check will be performed and the file redownloaded if the original is corrpupt.
 
-daymetMosaicDownload <- function(startYear, endYear, variables, destinationFolder, retryFailedDownloads){
+daymetMosaicDownload <- function(years, variables, destinationFolder, retryFailedDownloads){
   
-  # Need to include a section that checks if the downloaded file is not corrupt and can be openned
+  # Default to retrying corrupted files
+  if( is.null(retryFailedDownloads) ) { retryFailedDownloads = TRUE }
+
   require(ncdf4)
   
   # Loop through years
-  for ( year in seq(from = startYear, to = endYear, by = 1) ){
+  for ( year in years ){
     
     # Loop through variables
     for( var in variables){
@@ -21,12 +23,15 @@ daymetMosaicDownload <- function(startYear, endYear, variables, destinationFolde
       # Name the output file
       outFile <- file.path(destinationFolder, paste0(var, '_', year, '.nc4'))
             
-      # Don't download if the file already exists
+      # Alert the user if the file already exists in the target directory. Also checks for file corruption.
       if(file.exists(outFile)){
         print(paste0("File '", outFile ,"' already exists in download directory."));
-        #existingFileTest <- try(nc_open(outFile), silent=T);
-        if(is(try(nc_open(outFile), silent=T),"try-error")) {print(paste0("Existing file: '", outFile, "' is corrupt. Suggest deleting this file."))}
-      }# end if
+
+        # Alerts the user if the existing file is corrupt
+        if(is(try(nc_open(outFile), silent=T),"try-error")){
+          print(paste0("Existing file: '", outFile, "' is corrupt. Suggest deleting this file."))
+        }# end corruption check
+      }# end file.exists check
       
       # If the file doesn't exist, download it
       while(!file.exists(outFile)){
@@ -35,19 +40,20 @@ daymetMosaicDownload <- function(startYear, endYear, variables, destinationFolde
         beg <- proc.time()[3]
         
         # Download the file
-        download.file(url = address, destfile = outFile, quiet = FALSE, mode = 'wb')
-          
-        # Time download
-        runTime <- (proc.time()[3] - beg)/3600
-          
+        download.file(url      = address, 
+                      destfile = outFile, 
+                      quiet    = FALSE, 
+                      mode     = 'wb')
+            
         # Print download time
-        print(paste0("Download took ", runTime, " hours.") )
+        print(paste0("Download took ", (proc.time()[3] - beg)/3600, " hours.") )
         
-        # Test to see if the file downloaded correctly. If not, re-attempt.
+        # Test to see if the file downloaded correctly. If not, retry download.
         fileTest <- try(nc_open(outFile), silent=T)
-        if(is(fileTest,"try-error") & retryFailedDownloads) {file.remove(outFile);print("File corrupt. Removing and redownloading....")} else {nc_close(fileTest); rm(fileTest)}
+        if(is(fileTest,"try-error") & retryFailedDownloads) {
+          file.remove(outFile);print("File corrupt. Removing and redownloading....")
+        } else{nc_close(fileTest); rm(fileTest)}
       }# end while 
-      
     }# end variable loop
   }# end year loop
 }# end function

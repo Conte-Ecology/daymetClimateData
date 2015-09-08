@@ -3,21 +3,15 @@
 ## This script completes the following:
 
 1. Download Daymet climate data (NetCDF-4 format) mosaics across North America
-2. Spatially averages the climate records for NHDplus Version 2 Catchments. Any point which falls within the outline of the catchment is included in the average. If no point falls inside the catchment, the point nearest to the catchment centroid is used.
-3. Writes the data into an SQLite database
+2. Spatially averages the climate records for a shapefile outlining zones . Any point which falls within the outline of the catchment is included in the average. If no point falls inside the catchment, the point nearest to the catchment centroid is used.
+3. Writes the data into a SQLite database
 
 ---
 ##Load Libraries
 ```{r Libraries}
 rm(list=setdiff(ls(), "CATCHMENTS"))
+rm(list=ls())
 
-#library(dplyr)
-library(maptools)
-#library(RSQLite)
-#library(RSQLite.extfuns)
-#library(ncdf4)
-#library(reshape2)
-#library(tcltk)
 library(maptools)
 
 ```
@@ -34,6 +28,8 @@ proj4.Lambert <- "+proj=lcc +ellps=WGS84 +datum=WGS84 +lat_1=25 +lat_2=60 +lat_0
 START_YEAR <- 1980
 END_YEAR <- 2013
 
+YEARS <- seq(from = START_YEAR, to = END_YEAR, by = 1)
+
 # Variables
 VARIABLES <- c('tmax', 'tmin', 'prcp', 'dayl', 'srad', 'vp', 'swe')
 
@@ -41,24 +37,17 @@ VARIABLES <- c('tmax', 'tmin', 'prcp', 'dayl', 'srad', 'vp', 'swe')
 DAYMET_DIRECTORY <- '//IGSAGBEBWS-MJO7/projects/dataIn/environmental/climate/daymet/Daily'
 
 # Name of the database with Daymet data paired to NHDPlus catchments
-#DATABASE_NAME <- 'DaymetByNENYHRDCatchments'
 DATABASE_NAME <- 'test'
 TABLE_NAME <- 'climateRecord'
-tableName <- TABLE_NAME
 
 CATCHMENTS <- readShapePoly('C:/KPONEIL/GitHub/projects/daymetClimateData/gisFiles/shapefiles/NENYHRD_AllCatchments_DaymetPrj.shp', proj4string=CRS(proj4.Lambert))
 
 ZONE_FIELD <- 'FEATUREID'
 
 # Run this until package is created
-
 source('C:/KPONEIL/GitHub/projects/daymetClimateData/scripts/functions/daymetMosaicDownload.R')
-#source('C:/KPONEIL/GitHub/projects/daymetClimateData/scripts/functions/spatialAverageDaymet.R')
-#source('C:/KPONEIL/GitHub/projects/daymetClimateData/scripts/functions/tileCatchmentsShapefile.R')
-#source('C:/KPONEIL/GitHub/projects/daymetClimateData/scripts/functions/transformShapefile.R')
-#source('C:/KPONEIL/GitHub/projects/daymetClimateData/scripts/functions/convertDaymetToSQLiteDatabase.R')
 source('C:/KPONEIL/GitHub/projects/daymetClimateData/scripts/functions/returnRecordFromDaymetDB.R')
-source('C:/KPONEIL/GitHub/projects/daymetClimateData/scripts/functions/determineSpatialRelationships.R')
+source('C:/KPONEIL/GitHub/projects/daymetClimateData/scripts/functions/populateSpatialAverageDatabase.R')
 
 ```
 
@@ -66,8 +55,7 @@ source('C:/KPONEIL/GitHub/projects/daymetClimateData/scripts/functions/determine
 ## Download the Daymet Mosaics
 ```{r Download Daymet}
 
-daymetMosaicDownload(startYear = START_YEAR,
-                     endYear = END_YEAR,
+daymetMosaicDownload(years = YEARS,
                      variables = VARIABLES,
                      destinationFolder = file.path(DAYMET_DIRECTORY),
                      retryFailedDownloads = TRUE)
@@ -76,15 +64,15 @@ daymetMosaicDownload(startYear = START_YEAR,
 ---
 ## Create and Connect to Database
 ```{r Make database connection}
-
-setwd(DAYMET_DIRECTORY)
-
-# If the database does not exist then create one
-if ( !file.exists(DATABASE_NAME) ) 
-  { src_sqlite(DATABASE_NAME, create = T) }
-
-# Connect to the database
-database <- dbConnect(SQLite(), DATABASE_NAME)
+#
+#setwd(DAYMET_DIRECTORY)
+#
+## If the database does not exist then create one
+#if ( !file.exists(DATABASE_NAME) ) 
+#  { src_sqlite(DATABASE_NAME, create = T) }
+#
+## Connect to the database
+#database <- dbConnect(SQLite(), DATABASE_NAME)
 ```
 
 ---
@@ -94,20 +82,16 @@ database <- dbConnect(SQLite(), DATABASE_NAME)
 # Variables and years to average and add to database
 B <- proc.time()[3]
 
-allYears <- seq(from = START_YEAR, to = END_YEAR, by = 1)
-
 catTest <- CATCHMENTS[1:10,]
 
-spatialIndeces <- determineSpatialRelationships(catchmentsShapefile = catTest, 
-                                              daymetDirectory = DAYMET_DIRECTORY,
-                                              variables = VARIABLES,
-                                              years = allYears)
 
-
-
-
-
-
+populateSpatialAverageDatabase(zonesShapefile = CATCHMENTS, 
+                               zoneField = ZONE_FIELD, 
+                               daymetDirectory = DAYMET_DIRECTORY, 
+                               variables = VARIABLES, 
+                               years = YEARS, 
+                               databaseFilePath = DATABASE_PATH, 
+                               tableName = TABLE_NAME)
 
 
 

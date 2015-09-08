@@ -1,0 +1,204 @@
+# Daymet Download & Processing
+
+## This script completes the following:
+
+1. Download Daymet climate data (NetCDF-4 format) mosaics across North America
+2. Spatially averages the climate records for a shapefile outlining zones . Any point which falls within the outline of the catchment is included in the average. If no point falls inside the catchment, the point nearest to the catchment centroid is used.
+3. Writes the data into a SQLite database
+
+---
+##Load Libraries
+```{r Libraries}
+#rm(list=setdiff(ls(), "ZONES_SHAPEFILE"))
+rm(list=ls())
+
+library(maptools) # To read shapefile
+library(raster)# To get extent of shapefile
+library(rgdal)# To transform shapefile
+library(devtools)
+
+# Install package
+#devtools::install_github()
+install("C:/KPONEIL/GitHub/packages/spatialAverageDaymet")
+library(spatialAverageDaymet)
+
+```
+
+---
+## Enter Inputs
+```{r Inputs}
+
+# Define the projections of the shapefiles and Daymet data (Lambert Conformal Conic). This gets transformed to the coordinate system for processing.
+proj4.Lambert <- "+proj=lcc +ellps=WGS84 +datum=WGS84 +lat_1=25 +lat_2=60 +lat_0=42.5 +lon_0=-100 +x_0=0 +y_0=0"
+proj4.WGS <- "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs +towgs84=0,0,0"
+
+# Temporal range
+START_YEAR <- 1980
+END_YEAR <- 2014
+
+YEARS <- seq(from = START_YEAR, to = END_YEAR, by = 1)
+
+# Variables
+VARIABLES <- c("tmax", "tmin", "prcp", "dayl", "srad", "vp", "swe")
+
+# Destination folder of the raw Daymet data
+DAYMET_DIRECTORY <- "F:/KPONEIL/SourceData/climate/DAYMET/raw"
+
+# Name of the database with Daymet data paired to NHDPlus catchments
+DATABASE_PATH <- "C:/KPONEIL/SHEDS/NHDHRDV2/daymet/NHDHRDV2_01"
+TABLE_NAME <- "climateRecord"
+
+ZONES_SHAPEFILE <- readShapePoly("C:/KPONEIL/GitHub/projects/daymetClimateData/gisFiles/shapefiles/NHDHRDV2/Catchments01_Daymet.shp", proj4string=CRS(proj4.Lambert))
+#projection(ZONES_SHAPEFILE)
+
+
+ZONE_FIELD <- "FEATUREID"
+
+```
+
+---
+## Download the Daymet Mosaics
+```{r Download Daymet}
+
+downloadDaymetMosaic(years = YEARS,
+                     variables = VARIABLES,
+                     destinationFolder = file.path(DAYMET_DIRECTORY),
+                     retryFailedDownloads = TRUE)
+```
+
+---
+## Average the Daymet Records by Catchment
+```{r Spatial pre-processing}
+
+# Transform the shapefile into the coordinate system so the units are in lat/lon. This makes the shapefile comparable to the coordinates provided by Daymet NetCDFs in WGS.
+transformShapefile <- spTransform(ZONES_SHAPEFILE,
+                                    CRS(proj4.WGS),
+                                    class = "SpatialPolygonsDataFrame")
+  
+# If the shapefile is larger than 2 degrees by 2 degrees then it gets tiled.
+EXT <- extent(transformShapefile)
+  
+# If the shapefile is larger than 2 x 2 degrees, it is tiled to prevent memory issues when accessing records from NetCDFs.
+if( abs(EXT@xmin - EXT@xmax) <= 2 & abs(EXT@ymax - EXT@ymin) <= 2){
+  tiledShapefile <- list(transformShapefile)
+}else{
+  tiledShapefile <- tileShapefile(shapefile = transformShapefile) 
+}
+
+rm(ZONES_SHAPEFILE); gc()
+rm(transformShapefile); gc()
+```
+
+
+---
+## Average the Daymet Records by Catchment
+```{r Average Daymet by catchment}
+
+
+# Variables and years to average and add to database
+B <- proc.time()[3]
+
+for( t in 1:length(tiledShapefile) ){
+  
+  assignClimateRecordToZones(zonesShapefile = tiledShapefile[[t]], 
+                                 zoneField = ZONE_FIELD, 
+                                 daymetDirectory = DAYMET_DIRECTORY, 
+                                 variables = VARIABLES, 
+                                 years = YEARS, 
+                                 outputToSQLite = TRUE,
+                                 databaseFilePath = DATABASE_PATH, 
+                                 databaseTableName = TABLE_NAME)
+}
+
+
+E <- proc.time()[3]
+
+print(paste0("Total time: ", (E - B)/3600, " hours."))
+```
+
+
+
+---
+## Average the Daymet Records by Catchment
+```{r Assign all catchments layers}
+
+zones <- c("01", "02", "03", "04", "05", "06")
+
+for ( i in seq_along(zones)){
+
+  ZONES_SHAPEFILE <- readShapePoly(paste0("C:/KPONEIL/GitHub/projects/daymetClimateData/gisFiles/shapefiles/NHDHRDV2/Catchments", zones[i], "_Daymet.shp"), 
+                                          proj4string=CRS(proj4.Lambert))
+
+  # Transform the shapefile into the coordinate system so the units are in lat/lon. This makes the shapefile comparable to the coordinates provided by Daymet NetCDFs in WGS.
+  transformShapefile <- spTransform(ZONES_SHAPEFILE,
+                                      CRS(proj4.WGS),
+                                      class = "SpatialPolygonsDataFrame")
+    
+  # If the shapefile is larger than 2 degrees by 2 degrees then it gets tiled.
+  EXT <- extent(transformShapefile)
+    
+  # If the shapefile is larger than 2 x 2 degrees, it is tiled to prevent memory issues when accessing records from NetCDFs.
+  if( abs(EXT@xmin - EXT@xmax) <= 2 & abs(EXT@ymax - EXT@ymin) <= 2){
+    tiledShapefile <- list(transformShapefile)
+  }else{
+    tiledShapefile <- tileShapefile(shapefile = transformShapefile) 
+  }
+
+  # Variables and years to average and add to database
+  B <- proc.time()[3]
+  
+  for( t in 1:length(tiledShapefile) ){
+    
+    assignClimateRecordToZones(zonesShapefile = tiledShapefile[[t]], 
+                                   zoneField = ZONE_FIELD, 
+                                   daymetDirectory = DAYMET_DIRECTORY, 
+                                   variables = VARIABLES, 
+                                   years = YEARS, 
+                                   outputToSQLite = TRUE,
+                                   databaseFilePath = DATABASE_PATH, 
+                                   databaseTableName = TABLE_NAME)
+  }
+
+  E <- proc.time()[3]
+
+  print(paste0("Total time: ", (E - B)/3600, " hours."))
+  
+}
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+---
+## Example of returning data from SQLite Database
+```{r Return record from database}
+
+dbPath <- 'C:/KPONEIL/GitHub/projects/daymetClimateData/gisFiles/DaymetByNENYHRDCatchments'
+
+cats <- ZONES_SHAPEFILE@data$FEATUREID
+catIDs <- unique(cats$FEATUREID)
+
+
+record <- returnRecordFromDaymetDB(databaseFilePath = DATABASE_PATH, 
+                         tableName = 'climateRecord', 
+                         startDate = "1980-02-01", 
+                         endDate = "1980-02-02", 
+                         featureIDs = catIDs,
+                         variables = c('tmax'))#, 'tmin', 'prcp', 'dayl', 'srad', 'vp', 'swe'))
+```

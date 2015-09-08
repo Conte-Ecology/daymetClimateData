@@ -12,20 +12,15 @@ createDaymetPointShapefile <- function(boundaryShapefile, NetCDF, includeVariabl
   require(ncdf4)
   require(raster)
   require(sp)
-  
-  PROJ <- proj4string(catchments)
-  
-  if(!proj4string(catchments) == PROJ){
-    stop(print(paste("proj4strings of boundaryShapefile and Daymet data do not match. 
-    Current proj4strings:
-    Daymet NetCDF file = +proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs +towgs84=0,0,0
-    boundaryShapefile  =",PROJ)))
+    
+  if( proj4string(boundaryShapefile) != "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs +towgs84=0,0,0"){
+    stop("Error in 'createDaymetPointShapefile' function: The spatial relationship between the shapefile and Daymet grid cannot be determined. The shapefile must be in WGS.")
   }
   
   # Read in variables
   lat = ncvar_get ( nc=NetCDF, varid="lat", start = c(1,1), count = c(NetCDF$var$lat$varsize[1], NetCDF$var$lat$varsize[2]) )
   lon = ncvar_get ( nc=NetCDF, varid="lon", start = c(1,1), count = c(NetCDF$var$lon$varsize[1], NetCDF$var$lon$varsize[2]) )
-  
+    
   # Convert NetCDF info to spatial data for overlay
   # -----------------------------------------------
   # Get the extent of the shapefile
@@ -55,6 +50,10 @@ createDaymetPointShapefile <- function(boundaryShapefile, NetCDF, includeVariabl
   lat = ncvar_get( nc = NetCDF, varid="lat",     start = c(minRow, minCol),    count = c(countX,countY) )
   lon = ncvar_get( nc = NetCDF, varid="lon",     start = c(minRow, minCol),    count = c(countX,countY) )
   if( includeVariable == T ) {
+    
+    # Get variable name
+    variable <- names(NetCDF$var)[names(NetCDF$var) %in% c("tmax", "tmin", "prcp", "dayl", "srad", "vp", "swe")]
+    
     var = ncvar_get( nc = NetCDF, varid=variable,  start = c(minRow, minCol, dOY), count = c(countX,countY,1) )
     
     # Index and replace missval
